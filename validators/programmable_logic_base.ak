@@ -7,7 +7,7 @@
 /// Ownership is determined by the per-holder stake credential.
 
 use aiken/collection/list
-use cardano/address.{Credential}
+use cardano/address.{Credential, Script}
 use cardano/transaction.{Transaction}
 
 validator programmable_logic_base(stake_cred: Credential) {
@@ -32,4 +32,40 @@ validator programmable_logic_base(stake_cred: Credential) {
   else(_) {
     fail
   }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+const mock_global_cred =
+  Script(#"aabbccddee112233445566778899001122334455667788990011223344556677")
+
+test spend_succeeds_when_global_in_withdrawals() {
+  let tx =
+    Transaction {
+      ..transaction.placeholder,
+      withdrawals: [Pair(mock_global_cred, 0)],
+    }
+  programmable_logic_base.spend(mock_global_cred, None, Void, Void, tx)
+}
+
+test spend_fails_without_global_withdrawal() fail {
+  let tx =
+    Transaction {
+      ..transaction.placeholder,
+      withdrawals: [],
+    }
+  programmable_logic_base.spend(mock_global_cred, None, Void, Void, tx)
+}
+
+test spend_fails_with_wrong_credential() fail {
+  let wrong_cred =
+    Script(#"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+  let tx =
+    Transaction {
+      ..transaction.placeholder,
+      withdrawals: [Pair(wrong_cred, 0)],
+    }
+  programmable_logic_base.spend(mock_global_cred, None, Void, Void, tx)
 }
