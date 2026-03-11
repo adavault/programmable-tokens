@@ -1,0 +1,23 @@
+name = "adavault/programmable-tokens"
+version = "0.0.0"
+compiler = "v1.1.21"
+plutus = "v3"
+license = "Apache-2.0"
+description = "CIP-113 Programmable Tokens — research implementation and use case exploration"
+
+[repository]
+user = "adavault"
+project = "programmable-tokens"
+platform = "github"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "v3.0.0"
+source = "github"
+
+[[dependencies]]
+name = "aiken-lang/fuzz"
+version = "v2.2.0"
+source = "github"
+
+[config]
