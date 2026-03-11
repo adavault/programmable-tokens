@@ -218,36 +218,35 @@ type RegistryRedeemer {
 
 ## Implementation Plan
 
-### Phase 1: Core Framework
-- [ ] Implement types module (all shared types)
-- [ ] Implement `programmable_logic_base` (spend → delegate to global)
-- [ ] Implement `programmable_logic_global` (withdraw-zero coordinator)
-- [ ] Implement `protocol_params_mint` (one-shot bootstrap)
-- [ ] Unit tests for all core validators
+### Phase 1: Core Framework ✓
+- [x] Implement types module (all shared types)
+- [x] Implement `programmable_logic_base` (spend → delegate to global) — 3 tests
+- [x] Implement `programmable_logic_global` (withdraw-zero coordinator) — 6 tests
+- [x] Implement `protocol_params_mint` (one-shot bootstrap) — 5 tests
+- [x] Bug fix: `validate_single_cs` for `TokenExists` now uses `expect` to enforce transfer logic
 
-### Phase 2: Registry
-- [ ] Implement sorted linked list library
-- [ ] Implement `registry_mint` (init + insert)
-- [ ] Implement `registry_spend` (guard nodes)
-- [ ] Implement `issuance_mint` (parameterized per token)
-- [ ] Implement `issuance_cbor_hex_mint` (template reference)
-- [ ] Unit tests for registry operations
+### Phase 2: Registry ✓
+- [x] Implement `registry_mint` (init + insert with sorted linked list) — 7 tests
+- [x] Implement `registry_spend` (guard nodes, delegates to mint policy) — 3 tests
+- [x] Implement `issuance_mint` (parameterized per token) — 4 tests
+- [ ] Implement `issuance_cbor_hex_mint` (template reference) — deferred
 
-### Phase 3: Substandard — Simple Transfer Logic
-- [ ] Implement basic `transfer_logic` (whitelist or open transfer)
-- [ ] Implement `third_party_transfer_logic` (admin freeze/seize)
-- [ ] Unit tests
+### Phase 3: Substandard — Transfer Logic ✓
+- [x] Implement `transfer_logic` (open transfer with admin auth) — 3 tests
+- [x] Implement `third_party_transfer_logic` (admin freeze/seize) — 4 tests
 
-### Phase 4: Use Case — SPO Loyalty Token
-- [ ] Define loyalty token transfer rules
-- [ ] Implement custom transfer logic validator
-- [ ] E2E tests on preview testnet
-- [ ] Off-chain integration (MeshJS)
+### Phase 4: Use Case — SPO Loyalty Token ✓
+- [x] `loyalty_transfer_logic` — whitelist-based, scoped to loyalty policy — 5 tests
+- [x] `loyalty_minting_logic` — admin-controlled minting — 3 tests
+- [ ] E2E tests on preview testnet — future
+- [ ] Off-chain integration (MeshJS) — future
 
-### Phase 5: Skill Extension
-- [ ] Document CIP-113 patterns in aiken-skill
-- [ ] Add examples for programmable token validators
-- [ ] Add off-chain integration guide
+### Phase 5: Skill Extension ✓
+- [x] Document CIP-113 patterns in aiken-skill (patterns.md)
+- [x] Document Aiken learnings in aiken-skill (gotchas.md)
+- [ ] Add off-chain integration guide — future
+
+**Total: 11 validators, 43 tests, 0 errors, 0 warnings**
 
 ---
 
