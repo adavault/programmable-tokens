@@ -1,0 +1,29 @@
+{
+  "name": "programmable-tokens",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "CIP-113 Programmable Tokens — E2E tests on preview testnet",
+  "scripts": {
+    "test": "tsx test/e2e.ts",
+    "test:bootstrap": "tsx test/e2e.ts bootstrap",
+    "test:register": "tsx test/e2e.ts register",
+    "test:mint": "tsx test/e2e.ts mint",
+    "test:transfer": "tsx test/e2e.ts transfer"
+  },
+  "keywords": [],
+  "author": "ADAvault",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@meshsdk/core": "^1.9.0-beta.101",
+    "@meshsdk/core-cst": "^1.9.0-beta.101",
+    "@meshsdk/provider": "^1.9.0-beta.101",
+    "@meshsdk/wallet": "^1.9.0-beta.101",
+    "@types/ws": "^8.18.1",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
