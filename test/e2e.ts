@@ -987,10 +987,11 @@ async function transferTokens() {
   );
   log(`Programmable logic address: ${progLogicAddr}`);
 
-  // The LOYAL tokens UTxO — Kupo doesn't index the prog logic address,
-  // so we construct the UTxO reference from the mint tx output.
+  // The LOYAL tokens UTxO — track latest location (moves each transfer).
+  // After mint: at mintTxHash#0. After each transfer: at transferTxHash#0.
+  const loyaltyTxHash = state.transferTxHash || state.mintTxHash!;
   const loyaltyUtxo = {
-    txHash: state.mintTxHash!,
+    txHash: loyaltyTxHash,
     outputIndex: 0,
     amount: [
       { unit: "lovelace", quantity: "5000000" },
@@ -1174,7 +1175,7 @@ try {
       log("Usage: npm test [bootstrap|register|deploy|mint|transfer]");
       process.exit(1);
   }
-} catch (err) {
-  console.error("[cip113] ERROR:", err);
+} catch (err: any) {
+  console.error("[cip113] ERROR:", JSON.stringify(err, null, 2));
   process.exit(1);
 }
