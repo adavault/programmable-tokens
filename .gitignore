@@ -13,3 +13,9 @@ plutus.json
 # OS
 .DS_Store
 Thumbs.db
+
+# E2E test secrets and state
+test/keys/
+test/*-state.json
+node_modules/
+dist/
