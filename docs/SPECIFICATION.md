@@ -229,7 +229,7 @@ type RegistryRedeemer {
 - [x] Implement `registry_mint` (init + insert with sorted linked list) — 7 tests
 - [x] Implement `registry_spend` (guard nodes, delegates to mint policy) — 3 tests
 - [x] Implement `issuance_mint` (parameterized per token) — 4 tests
-- [ ] Implement `issuance_cbor_hex_mint` (template reference) — deferred
+- [x] Implement `issuance_cbor_hex_mint` (template reference NFT) — 5 tests
 
 ### Phase 3: Substandard — Transfer Logic ✓
 - [x] Implement `transfer_logic` (open transfer with admin auth) — 3 tests
@@ -246,7 +246,7 @@ type RegistryRedeemer {
 - [x] Document Aiken learnings in aiken-skill (gotchas.md)
 - [ ] Add off-chain integration guide — future
 
-**Total: 11 validators, 43 tests, 0 errors, 0 warnings**
+**Total: 12 validators, 48 tests, 0 errors, 0 warnings**
 
 ---
 
