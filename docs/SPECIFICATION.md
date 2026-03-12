@@ -242,8 +242,8 @@ type RegistryRedeemer {
 - [ ] Off-chain integration (MeshJS) — future
 
 ### Phase 5: Skill Extension ✓
-- [x] Document CIP-113 patterns in aiken-skill (patterns.md)
-- [x] Document Aiken learnings in aiken-skill (gotchas.md)
+- [x] Document CIP-113 patterns in cardano-skill (patterns.md)
+- [x] Document Aiken learnings in cardano-skill (gotchas.md)
 - [ ] Add off-chain integration guide — future
 
 **Total: 12 validators, 48 tests, 0 errors, 0 warnings**
