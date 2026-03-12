@@ -1,3 +1,7 @@
+use cardano/address.{Credential, Script, VerificationKey}
+use cardano/transaction.{Transaction, placeholder}
+use programmable_tokens/utils.{has_key, has_signatory}
+
 /// CIP-113 Third-Party Transfer Logic — Freeze & Seize Substandard
 ///
 /// Invoked via withdraw-zero for admin operations (freeze, seize, force transfer).
@@ -11,11 +15,6 @@
 ///
 /// This validator only checks admin authorization.
 /// Parameterized by the admin credential.
-
-use cardano/address.{Credential, Script, VerificationKey}
-use cardano/transaction.{Transaction, placeholder}
-use programmable_tokens/utils.{has_key, has_signatory}
-
 validator third_party_transfer_logic(admin_cred: Credential) {
   withdraw(_redeemer: Data, _account: Credential, tx: Transaction) {
     // Admin must authorize the third-party action
@@ -34,21 +33,15 @@ validator third_party_transfer_logic(admin_cred: Credential) {
 // Tests
 // ---------------------------------------------------------------------------
 
-const t_admin_pkh =
-  #"11111111111111111111111111111111111111111111111111111111"
+const t_admin_pkh = #"11111111111111111111111111111111111111111111111111111111"
 
 const t_admin_script =
   #"22222222222222222222222222222222222222222222222222222222"
 
-const t_own_hash =
-  #"33333333333333333333333333333333333333333333333333333333"
+const t_own_hash = #"33333333333333333333333333333333333333333333333333333333"
 
 test vk_admin_succeeds() {
-  let tx =
-    Transaction {
-      ..placeholder,
-      extra_signatories: [t_admin_pkh],
-    }
+  let tx = Transaction { ..placeholder, extra_signatories: [t_admin_pkh] }
   third_party_transfer_logic.withdraw(
     VerificationKey(t_admin_pkh),
     Void,

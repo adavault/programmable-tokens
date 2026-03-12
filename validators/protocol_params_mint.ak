@@ -1,3 +1,10 @@
+use aiken/collection/dict
+use aiken/collection/list
+use cardano/address
+use cardano/assets
+use cardano/transaction.{OutputReference, Transaction}
+use programmable_tokens/types.{protocol_params_token}
+
 /// CIP-113 Protocol Parameters Mint
 ///
 /// One-shot minting policy for the protocol parameters NFT.
@@ -6,28 +13,15 @@
 ///
 /// Parameterized by a UTxO reference (consumed during mint) to guarantee
 /// exactly one instance can ever exist.
-
-use aiken/collection/dict
-use aiken/collection/list
-use cardano/address
-use cardano/assets
-use cardano/transaction.{OutputReference, Transaction}
-use programmable_tokens/types.{protocol_params_token}
-
 validator protocol_params_mint(utxo_ref: OutputReference) {
   mint(_redeemer: Data, policy_id: assets.PolicyId, tx: Transaction) {
-
     // The parameterized UTxO must be consumed (one-shot guarantee)
     let utxo_consumed =
-      list.any(
-        tx.inputs,
-        fn(input) { input.output_reference == utxo_ref },
-      )
+      list.any(tx.inputs, fn(input) { input.output_reference == utxo_ref })
 
     // Must mint exactly 1 token with the protocol params token name
     let minted = assets.tokens(tx.mint, policy_id)
-    let correct_mint =
-      dict.to_pairs(minted) == [Pair(protocol_params_token, 1)]
+    let correct_mint = dict.to_pairs(minted) == [Pair(protocol_params_token, 1)]
 
     utxo_consumed? && correct_mint?
   }

@@ -1,3 +1,7 @@
+use aiken/collection/list
+use cardano/address.{Credential, Script}
+use cardano/transaction.{Transaction}
+
 /// CIP-113 Programmable Logic Base Validator
 ///
 /// Custody of all programmable token UTxOs. Intentionally minimal —
@@ -5,18 +9,8 @@
 ///
 /// All programmable tokens live at addresses sharing this payment credential.
 /// Ownership is determined by the per-holder stake credential.
-
-use aiken/collection/list
-use cardano/address.{Credential, Script}
-use cardano/transaction.{Transaction}
-
 validator programmable_logic_base(stake_cred: Credential) {
-  spend(
-    _datum: Option<Data>,
-    _redeemer: Data,
-    _own_ref: Data,
-    tx: Transaction,
-  ) {
+  spend(_datum: Option<Data>, _redeemer: Data, _own_ref: Data, tx: Transaction) {
     // The only job: verify the global coordinator is invoked in this tx.
     // The global validator (stake script) handles all actual validation.
     // This runs once PER INPUT but is O(1) — just a withdrawal lookup.
@@ -51,11 +45,7 @@ test spend_succeeds_when_global_in_withdrawals() {
 }
 
 test spend_fails_without_global_withdrawal() fail {
-  let tx =
-    Transaction {
-      ..transaction.placeholder,
-      withdrawals: [],
-    }
+  let tx = Transaction { ..transaction.placeholder, withdrawals: [] }
   programmable_logic_base.spend(mock_global_cred, None, Void, Void, tx)
 }
 

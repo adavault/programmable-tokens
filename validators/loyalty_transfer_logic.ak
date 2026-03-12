@@ -1,3 +1,9 @@
+use aiken/collection/list
+use cardano/address.{Address, Credential, Inline, Script, VerificationKey}
+use cardano/assets.{PolicyId}
+use cardano/transaction.{InlineDatum, Input, Output, Transaction, placeholder}
+use programmable_tokens/utils.{expect_inline_datum, has_currency_symbol}
+
 /// SPO Loyalty Token — Whitelist Transfer Logic
 ///
 /// Custom transfer logic for the ADAvault loyalty token.
@@ -12,15 +18,6 @@
 ///   loyalty_policy — the issuance policy ID for the loyalty token
 ///   whitelist_cs   — NFT policy marking the whitelist reference UTxO
 ///   prog_logic_cred — the shared programmable logic payment credential
-
-use aiken/collection/list
-use cardano/address
-use cardano/address.{Address, Credential, Inline, Script, VerificationKey}
-use cardano/assets
-use cardano/assets.{PolicyId}
-use cardano/transaction.{InlineDatum, Input, Output, Transaction, placeholder}
-use programmable_tokens/utils.{expect_inline_datum, has_currency_symbol}
-
 validator loyalty_transfer_logic(
   loyalty_policy: PolicyId,
   whitelist_cs: PolicyId,
@@ -110,17 +107,14 @@ const t_whitelist_cs =
 const t_prog_logic_hash =
   #"33333333333333333333333333333333333333333333333333333333"
 
-const t_alice_pkh =
-  #"aa111111111111111111111111111111111111111111111111111111"
+const t_alice_pkh = #"aa111111111111111111111111111111111111111111111111111111"
 
-const t_bob_pkh =
-  #"bb222222222222222222222222222222222222222222222222222222"
+const t_bob_pkh = #"bb222222222222222222222222222222222222222222222222222222"
 
 const t_charlie_pkh =
   #"cc333333333333333333333333333333333333333333333333333333"
 
-const t_own_hash =
-  #"99999999999999999999999999999999999999999999999999999999"
+const t_own_hash = #"99999999999999999999999999999999999999999999999999999999"
 
 fn t_prog_addr(pkh: ByteArray) -> Address {
   Address {
@@ -232,8 +226,7 @@ test transfer_from_non_whitelisted_fails() fail {
 
 test non_loyalty_token_ignores_whitelist() {
   // An output at prog_logic_cred WITHOUT loyalty tokens is not checked
-  let other_policy =
-    #"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  let other_policy = #"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
   let tx =
     Transaction {
       ..placeholder,

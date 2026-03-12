@@ -1,3 +1,20 @@
+use aiken/collection/dict.{Dict}
+use aiken/collection/dict/strategy
+use aiken/collection/list
+use cardano/address.{Address, Credential, Inline, Script, VerificationKey}
+use cardano/assets.{AssetName, PolicyId}
+use cardano/transaction.{
+  InlineDatum, Input, NoDatum, Output, OutputReference, Transaction, placeholder,
+}
+use programmable_tokens/types.{
+  ProgrammableLogicGlobalParams, ProgrammableLogicGlobalRedeemer, RegistryNode,
+  RegistryProof, ThirdPartyAct, TokenDoesNotExist, TokenExists, TransferAct,
+}
+use programmable_tokens/utils.{
+  bytearray_lt, elem_at, expect_inline_datum, has_currency_symbol, has_key,
+  has_signatory,
+}
+
 /// CIP-113 Programmable Logic Global Stake Validator
 ///
 /// The core coordinator for all programmable token operations.
@@ -11,23 +28,6 @@
 /// 4. Verify output values preserve all programmable tokens
 ///
 /// Parameterized by the protocol parameters NFT policy ID.
-
-use aiken/collection/dict.{Dict}
-use aiken/collection/dict/strategy
-use aiken/collection/list
-use cardano/address.{Address, Credential, Inline, Script, VerificationKey}
-use cardano/assets.{AssetName, PolicyId}
-use cardano/transaction.{InlineDatum, Input, NoDatum, Output, OutputReference,
-  Transaction, placeholder}
-use programmable_tokens/types.{
-  ProgrammableLogicGlobalParams, ProgrammableLogicGlobalRedeemer, RegistryNode,
-  RegistryProof, ThirdPartyAct, TokenDoesNotExist, TokenExists, TransferAct,
-}
-use programmable_tokens/utils.{
-  bytearray_lt, elem_at, expect_inline_datum, has_currency_symbol, has_key,
-  has_signatory,
-}
-
 validator programmable_logic_global(protocol_params_cs: PolicyId) {
   withdraw(
     redeemer: ProgrammableLogicGlobalRedeemer,
@@ -100,22 +100,12 @@ fn validate_transfer(
 
   // Check each token policy against registry proofs and filter to programmable tokens
   let prog_input_value =
-    check_proofs_and_filter(
-      input_value,
-      proofs,
-      tx,
-      registry_node_cs,
-    )
+    check_proofs_and_filter(input_value, proofs, tx, registry_node_cs)
 
   // Check minted/burned programmable tokens against registry
   let mint_value = assets.to_dict(tx.mint)
   let prog_mint_value =
-    check_proofs_and_filter(
-      mint_value,
-      mint_proofs,
-      tx,
-      registry_node_cs,
-    )
+    check_proofs_and_filter(mint_value, mint_proofs, tx, registry_node_cs)
 
   // Merge: expected output = input programmable tokens + minted tokens
   let expected_value = merge_values(prog_input_value, prog_mint_value)
@@ -266,8 +256,7 @@ fn get_signed_prog_value(
     dict.empty,
     fn(input, acc) {
       if input.output.address.payment_credential == prog_logic_cred {
-        expect Some(Inline(stake_cred)) =
-          input.output.address.stake_credential
+        expect Some(Inline(stake_cred)) = input.output.address.stake_credential
         // Authorize based on stake credential type
         when stake_cred is {
           VerificationKey(pkh) -> {
@@ -331,8 +320,7 @@ fn do_check_proofs(
     [] -> (proofs, acc)
     [Pair(cs, tokens), ..rest] -> {
       expect [proof, ..remaining_proofs] = proofs
-      let is_programmable =
-        validate_single_cs(tx, cs, proof, registry_node_cs)
+      let is_programmable = validate_single_cs(tx, cs, proof, registry_node_cs)
       let new_acc =
         if is_programmable {
           dict.insert(acc, cs, tokens)
@@ -466,7 +454,8 @@ fn value_contains(
       let Pair(cs, expected_tokens) = pair
       when dict.get(superset, cs) is {
         None -> False
-        Some(actual_tokens) -> check_token_balance(actual_tokens, expected_tokens)
+        Some(actual_tokens) ->
+          check_token_balance(actual_tokens, expected_tokens)
       }
     },
   )
@@ -499,8 +488,7 @@ fn check_token_balance(
 // ---------------------------------------------------------------------------
 
 // Mock 28-byte hashes (56 hex chars)
-const t_params_cs =
-  #"11111111111111111111111111111111111111111111111111111111"
+const t_params_cs = #"11111111111111111111111111111111111111111111111111111111"
 
 const t_registry_cs =
   #"22222222222222222222222222222222222222222222222222222222"
@@ -514,8 +502,7 @@ const t_token_policy =
 const t_transfer_logic_hash =
   #"55555555555555555555555555555555555555555555555555555555"
 
-const t_holder_pkh =
-  #"66666666666666666666666666666666666666666666666666666666"
+const t_holder_pkh = #"66666666666666666666666666666666666666666666666666666666"
 
 const t_third_party_hash =
   #"77777777777777777777777777777777777777777777777777777777"

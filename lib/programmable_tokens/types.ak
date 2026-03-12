@@ -1,13 +1,12 @@
-/// CIP-113 Programmable Tokens — Shared Types
-///
-/// Core data types used across all programmable token validators.
-/// Based on the Cardano Foundation reference implementation.
-
 use cardano/address.{Credential}
 use cardano/assets.{PolicyId}
 
 // -- Constants --
 
+/// CIP-113 Programmable Tokens — Shared Types
+///
+/// Core data types used across all programmable token validators.
+/// Based on the Cardano Foundation reference implementation.
 /// Origin node token name (empty bytearray)
 pub const origin_node_tn = #""
 

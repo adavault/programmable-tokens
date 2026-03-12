@@ -1,3 +1,10 @@
+use aiken/collection/dict
+use aiken/collection/list
+use cardano/address
+use cardano/assets
+use cardano/transaction.{InlineDatum, OutputReference, Transaction, placeholder}
+use programmable_tokens/types.{IssuanceCborHex}
+
 /// CIP-113 Issuance CBOR Hex Mint
 ///
 /// One-shot minting policy for the reference NFT holding the issuance script
@@ -7,31 +14,18 @@
 ///
 /// Parameterized by a UTxO reference (consumed during mint) to guarantee
 /// exactly one instance can ever exist.
-
-use aiken/collection/dict
-use aiken/collection/list
-use cardano/address
-use cardano/assets
-use cardano/transaction.{InlineDatum, OutputReference, Transaction, placeholder}
-use programmable_tokens/types.{IssuanceCborHex}
-
 /// Token name for the issuance template reference NFT
 const issuance_cbor_hex_tn = "IssuanceCborHex"
 
 validator issuance_cbor_hex_mint(utxo_ref: OutputReference) {
   mint(_redeemer: Data, policy_id: assets.PolicyId, tx: Transaction) {
-
     // The parameterized UTxO must be consumed (one-shot guarantee)
     let utxo_consumed =
-      list.any(
-        tx.inputs,
-        fn(input) { input.output_reference == utxo_ref },
-      )
+      list.any(tx.inputs, fn(input) { input.output_reference == utxo_ref })
 
     // Must mint exactly 1 token with the template token name
     let minted = assets.tokens(tx.mint, policy_id)
-    let correct_mint =
-      dict.to_pairs(minted) == [Pair(issuance_cbor_hex_tn, 1)]
+    let correct_mint = dict.to_pairs(minted) == [Pair(issuance_cbor_hex_tn, 1)]
 
     // Output must contain the NFT with a valid IssuanceCborHex inline datum
     let valid_output =
@@ -39,9 +33,10 @@ validator issuance_cbor_hex_mint(utxo_ref: OutputReference) {
         tx.outputs,
         fn(output) {
           let has_token =
-            dict.get(assets.tokens(output.value, policy_id), issuance_cbor_hex_tn) == Some(
-              1,
-            )
+            dict.get(
+              assets.tokens(output.value, policy_id),
+              issuance_cbor_hex_tn,
+            ) == Some(1)
           if has_token {
             // Verify datum is a valid IssuanceCborHex
             expect InlineDatum(datum) = output.datum
@@ -74,8 +69,7 @@ const t_utxo_ref =
 const t_policy =
   #"aabbccddee112233445566778899001122334455667788990011223344556677"
 
-const t_holder_pkh =
-  #"11111111111111111111111111111111111111111111111111111111"
+const t_holder_pkh = #"11111111111111111111111111111111111111111111111111111111"
 
 fn t_seed_input() -> transaction.Input {
   transaction.Input {
