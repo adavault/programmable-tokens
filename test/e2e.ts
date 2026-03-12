@@ -1145,6 +1145,339 @@ async function transferTokens() {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 5: Round-trip Transfer — Send to recipient, then send back
+// ---------------------------------------------------------------------------
+
+async function transferRoundTrip() {
+  const ctx = await setup();
+  const state = loadState();
+
+  if (!state.mintTxHash) {
+    throw new Error("Run mint first");
+  }
+
+  log("\n=== Round-Trip Transfer: Send to Recipient & Back ===");
+
+  // Load recipient signing key
+  const recipientSkeyPath = join(__dirname, "keys", "recipient.skey");
+  const recipientRaw = readFileSync(recipientSkeyPath, "utf-8");
+  const recipientEnvelope = JSON.parse(recipientRaw);
+  const recipientSigningKey = recipientEnvelope.cborHex.startsWith("5820")
+    ? recipientEnvelope.cborHex.slice(4)
+    : recipientEnvelope.cborHex;
+
+  // Derive recipient key hash from vkey file
+  const recipientVkeyPath = join(__dirname, "keys", "recipient.vkey");
+  const recipientVkRaw = readFileSync(recipientVkeyPath, "utf-8");
+  const recipientVkEnvelope = JSON.parse(recipientVkRaw);
+  const recipientVkCbor: string = recipientVkEnvelope.cborHex;
+  // Ed25519 VK CBOR: "5820" + 32-byte key → hash with cardano-cli already done
+  // We use the known hash from key generation
+  const recipientKeyHash = "e4dde7b5b2ac766510bd36ce47b1c970dc1836333996b27a16a79a78";
+  log(`Recipient key hash: ${recipientKeyHash}`);
+
+  const issuanceCs = state.issuancePolicyId!;
+  const registryCs = state.registryMintPolicyId!;
+  const ppCs = state.protocolParamsPolicyId!;
+  const ppTokenNameHex = Buffer.from("ProtocolParams").toString("hex");
+  const loyaltyTokenName = Buffer.from("LOYAL").toString("hex");
+
+  // Our programmable logic address (sender)
+  const senderProgAddr = buildProgLogicAddress(
+    state.progLogicHash!,
+    ctx.keyHashHex,
+    config.networkId,
+  );
+
+  // Recipient's programmable logic address (same script, different stake VK)
+  const recipientProgAddr = buildProgLogicAddress(
+    state.progLogicHash!,
+    recipientKeyHash,
+    config.networkId,
+  );
+  log(`Sender prog logic addr:    ${senderProgAddr}`);
+  log(`Recipient prog logic addr: ${recipientProgAddr}`);
+
+  // --- Part 1: Transfer TO recipient ---
+  log("\n--- Part 1: Send 500 LOYAL to recipient ---");
+
+  const loyaltyTxHash = state.transferTxHash || state.mintTxHash!;
+  const loyaltyUtxo = {
+    txHash: loyaltyTxHash,
+    outputIndex: 0,
+    amount: [
+      { unit: "lovelace", quantity: "5000000" },
+      { unit: issuanceCs + loyaltyTokenName, quantity: "1000" },
+    ],
+    address: senderProgAddr,
+  };
+  log(`LOYAL UTxO: ${loyaltyUtxo.txHash}#${loyaltyUtxo.outputIndex}`);
+
+  // Fetch wallet UTxOs
+  const walletUtxos = await ctx.kupo.fetchAddressUTxOs(ctx.walletAddress);
+
+  // Find reference input UTxOs
+  const ppUtxo = walletUtxos.find((u) =>
+    u.output.amount.some((a) => a.unit === ppCs + ppTokenNameHex)
+  );
+  if (!ppUtxo) throw new Error("Protocol params NFT not found");
+
+  const registryNodeUtxo = walletUtxos.find((u) =>
+    u.output.amount.some((a) => a.unit === registryCs + issuanceCs)
+  );
+  if (!registryNodeUtxo) throw new Error("Registry node not found");
+
+  // Exclude data UTxOs + reference script UTxOs
+  const excludedIds = new Set([
+    `${ppUtxo.input.txHash}#${ppUtxo.input.outputIndex}`,
+    `${registryNodeUtxo.input.txHash}#${registryNodeUtxo.input.outputIndex}`,
+  ]);
+  if (state.refScriptsTxHash) {
+    for (let i = 0; i < 5; i++) {
+      excludedIds.add(`${state.refScriptsTxHash}#${i}`);
+    }
+  }
+  const selectableUtxos = walletUtxos.filter(
+    (u) => !excludedIds.has(`${u.input.txHash}#${u.input.outputIndex}`)
+  );
+  log(`Excluded ${excludedIds.size} UTxOs, ${selectableUtxos.length} selectable`);
+
+  // Collateral
+  const collateral = selectableUtxos.find(
+    (u) => u.output.amount.length === 1 && u.output.amount[0].unit === "lovelace"
+  ) || selectableUtxos[0];
+  if (!collateral) throw new Error("No collateral UTxO");
+
+  // Reward addresses for withdraw-zero
+  const globalRewardAddr = serializeRewardAddress(state.globalStakeHash!, true, config.networkId);
+  const transferRewardAddr = serializeRewardAddress(state.transferLogicHash!, true, config.networkId);
+
+  // Registry ref input sort order
+  const refInputsSorted = [
+    { hash: ppUtxo.input.txHash, idx: ppUtxo.input.outputIndex, type: "pp" },
+    { hash: registryNodeUtxo.input.txHash, idx: registryNodeUtxo.input.outputIndex, type: "registry" },
+  ].sort((a, b) => {
+    if (a.hash < b.hash) return -1;
+    if (a.hash > b.hash) return 1;
+    return a.idx - b.idx;
+  });
+  const registryNodeIdx = refInputsSorted.findIndex((r) => r.type === "registry");
+
+  // Redeemers
+  const baseRedeemer = { constructor: 0, fields: [] };
+  const globalRedeemer = {
+    constructor: 0,
+    fields: [
+      { list: [{ constructor: 0, fields: [{ int: registryNodeIdx }] }] },
+      { list: [] },
+    ],
+  };
+
+  const exBudget = {
+    baseSpend:        { mem: 2_000_000, steps: 1_000_000_000 },
+    globalWithdraw:   { mem: 8_000_000, steps: 4_000_000_000 },
+    transferWithdraw: { mem: 2_000_000, steps: 1_000_000_000 },
+  };
+
+  // Split: 500 LOYAL to recipient, 500 LOYAL stay with sender
+  const txBuilder1 = new MeshTxBuilder({
+    fetcher: ctx.kupo,
+    submitter: ctx.ogmios,
+  });
+
+  await txBuilder1
+    .readOnlyTxInReference(ppUtxo.input.txHash, ppUtxo.input.outputIndex)
+    .readOnlyTxInReference(registryNodeUtxo.input.txHash, registryNodeUtxo.input.outputIndex)
+    .spendingPlutusScriptV3()
+    .txIn(loyaltyUtxo.txHash, loyaltyUtxo.outputIndex, loyaltyUtxo.amount, loyaltyUtxo.address, 0)
+    .txInInlineDatumPresent()
+    .txInScript(state.progLogicScriptCbor!)
+    .spendingReferenceTxInRedeemerValue(baseRedeemer, "JSON", exBudget.baseSpend)
+    .withdrawalPlutusScriptV3()
+    .withdrawal(globalRewardAddr, "0")
+    .withdrawalScript(state.globalScriptCbor!)
+    .withdrawalRedeemerValue(globalRedeemer, "JSON", exBudget.globalWithdraw)
+    .withdrawalPlutusScriptV3()
+    .withdrawal(transferRewardAddr, "0")
+    .withdrawalScript(state.transferLogicCbor!)
+    .withdrawalRedeemerValue("", "Mesh", exBudget.transferWithdraw)
+    // Output 1: 500 LOYAL to recipient's programmable logic address
+    .txOut(recipientProgAddr, [
+      { unit: "lovelace", quantity: "5000000" },
+      { unit: issuanceCs + loyaltyTokenName, quantity: "500" },
+    ])
+    // Output 2: 500 LOYAL stay at sender's programmable logic address
+    .txOut(senderProgAddr, [
+      { unit: "lovelace", quantity: "5000000" },
+      { unit: issuanceCs + loyaltyTokenName, quantity: "500" },
+    ])
+    .requiredSignerHash(ctx.keyHashHex)
+    .txInCollateral(collateral.input.txHash, collateral.input.outputIndex)
+    .setTotalCollateral("5000000")
+    .setCollateralReturnAddress(ctx.walletAddress)
+    .selectUtxosFrom(selectableUtxos)
+    .changeAddress(ctx.walletAddress)
+    .signingKey(ctx.signingKey)
+    .complete();
+
+  txBuilder1.completeSigning();
+  const sendTxHash = await ctx.ogmios.submitTx(txBuilder1.txHex);
+  log(`Sent 500 LOYAL to recipient! Tx: ${sendTxHash}`);
+  log(`CardanoScan: https://preview.cardanoscan.io/transaction/${sendTxHash}`);
+
+  // Wait for confirmation before part 2
+  await waitForTx(ctx.kupo, sendTxHash);
+
+  // --- Part 2: Transfer BACK from recipient ---
+  log("\n--- Part 2: Send 500 LOYAL back from recipient ---");
+
+  // After part 1, outputs are:
+  //   sendTxHash#0 = 500 LOYAL at recipient's prog logic address
+  //   sendTxHash#1 = 500 LOYAL at sender's prog logic address
+  // We combine both back into sender's address.
+
+  const recipientUtxo = {
+    txHash: sendTxHash,
+    outputIndex: 0,
+    amount: [
+      { unit: "lovelace", quantity: "5000000" },
+      { unit: issuanceCs + loyaltyTokenName, quantity: "500" },
+    ],
+    address: recipientProgAddr,
+  };
+
+  const senderUtxo = {
+    txHash: sendTxHash,
+    outputIndex: 1,
+    amount: [
+      { unit: "lovelace", quantity: "5000000" },
+      { unit: issuanceCs + loyaltyTokenName, quantity: "500" },
+    ],
+    address: senderProgAddr,
+  };
+
+  // Re-fetch wallet UTxOs (changed after part 1)
+  const walletUtxos2 = await ctx.kupo.fetchAddressUTxOs(ctx.walletAddress);
+
+  const ppUtxo2 = walletUtxos2.find((u) =>
+    u.output.amount.some((a) => a.unit === ppCs + ppTokenNameHex)
+  );
+  if (!ppUtxo2) throw new Error("Protocol params NFT not found");
+
+  const registryNodeUtxo2 = walletUtxos2.find((u) =>
+    u.output.amount.some((a) => a.unit === registryCs + issuanceCs)
+  );
+  if (!registryNodeUtxo2) throw new Error("Registry node not found");
+
+  const excludedIds2 = new Set([
+    `${ppUtxo2.input.txHash}#${ppUtxo2.input.outputIndex}`,
+    `${registryNodeUtxo2.input.txHash}#${registryNodeUtxo2.input.outputIndex}`,
+  ]);
+  if (state.refScriptsTxHash) {
+    for (let i = 0; i < 5; i++) {
+      excludedIds2.add(`${state.refScriptsTxHash}#${i}`);
+    }
+  }
+  const selectableUtxos2 = walletUtxos2.filter(
+    (u) => !excludedIds2.has(`${u.input.txHash}#${u.input.outputIndex}`)
+  );
+  log(`Excluded ${excludedIds2.size} UTxOs, ${selectableUtxos2.length} selectable`);
+
+  const collateral2 = selectableUtxos2.find(
+    (u) => u.output.amount.length === 1 && u.output.amount[0].unit === "lovelace"
+  ) || selectableUtxos2[0];
+  if (!collateral2) throw new Error("No collateral UTxO");
+
+  // Reference input sort for part 2
+  const refInputsSorted2 = [
+    { hash: ppUtxo2.input.txHash, idx: ppUtxo2.input.outputIndex, type: "pp" },
+    { hash: registryNodeUtxo2.input.txHash, idx: registryNodeUtxo2.input.outputIndex, type: "registry" },
+  ].sort((a, b) => {
+    if (a.hash < b.hash) return -1;
+    if (a.hash > b.hash) return 1;
+    return a.idx - b.idx;
+  });
+  const registryNodeIdx2 = refInputsSorted2.findIndex((r) => r.type === "registry");
+
+  const globalRedeemer2 = {
+    constructor: 0,
+    fields: [
+      { list: [{ constructor: 0, fields: [{ int: registryNodeIdx2 }] }] },
+      { list: [] },
+    ],
+  };
+
+  // Two script inputs (recipient + sender), so 2 spend redeemers
+  // but programmable_logic_base runs per-input — same script, same redeemer
+  const exBudget2 = {
+    baseSpend:        { mem: 2_000_000, steps: 1_000_000_000 },  // per input
+    globalWithdraw:   { mem: 8_000_000, steps: 4_000_000_000 },
+    transferWithdraw: { mem: 2_000_000, steps: 1_000_000_000 },
+  };
+
+  const txBuilder2 = new MeshTxBuilder({
+    fetcher: ctx.kupo,
+    submitter: ctx.ogmios,
+  });
+
+  await txBuilder2
+    .readOnlyTxInReference(ppUtxo2.input.txHash, ppUtxo2.input.outputIndex)
+    .readOnlyTxInReference(registryNodeUtxo2.input.txHash, registryNodeUtxo2.input.outputIndex)
+    // Script input 1: recipient's 500 LOYAL
+    .spendingPlutusScriptV3()
+    .txIn(recipientUtxo.txHash, recipientUtxo.outputIndex, recipientUtxo.amount, recipientUtxo.address, 0)
+    .txInInlineDatumPresent()
+    .txInScript(state.progLogicScriptCbor!)
+    .spendingReferenceTxInRedeemerValue(baseRedeemer, "JSON", exBudget2.baseSpend)
+    // Script input 2: sender's remaining 500 LOYAL
+    .spendingPlutusScriptV3()
+    .txIn(senderUtxo.txHash, senderUtxo.outputIndex, senderUtxo.amount, senderUtxo.address, 0)
+    .txInInlineDatumPresent()
+    .txInScript(state.progLogicScriptCbor!)
+    .spendingReferenceTxInRedeemerValue(baseRedeemer, "JSON", exBudget2.baseSpend)
+    // Withdraw-zero: global coordinator
+    .withdrawalPlutusScriptV3()
+    .withdrawal(globalRewardAddr, "0")
+    .withdrawalScript(state.globalScriptCbor!)
+    .withdrawalRedeemerValue(globalRedeemer2, "JSON", exBudget2.globalWithdraw)
+    // Withdraw-zero: transfer logic
+    .withdrawalPlutusScriptV3()
+    .withdrawal(transferRewardAddr, "0")
+    .withdrawalScript(state.transferLogicCbor!)
+    .withdrawalRedeemerValue("", "Mesh", exBudget2.transferWithdraw)
+    // Output: all 1000 LOYAL consolidated back at sender's prog logic address
+    .txOut(senderProgAddr, [
+      { unit: "lovelace", quantity: "5000000" },
+      { unit: issuanceCs + loyaltyTokenName, quantity: "1000" },
+    ])
+    // Both signers: sender (stake VK for sender input + admin) + recipient (stake VK for recipient input)
+    .requiredSignerHash(ctx.keyHashHex)
+    .requiredSignerHash(recipientKeyHash)
+    .txInCollateral(collateral2.input.txHash, collateral2.input.outputIndex)
+    .setTotalCollateral("5000000")
+    .setCollateralReturnAddress(ctx.walletAddress)
+    .selectUtxosFrom(selectableUtxos2)
+    .changeAddress(ctx.walletAddress)
+    .signingKey(ctx.signingKey)
+    .signingKey(recipientSigningKey)
+    .complete();
+
+  txBuilder2.completeSigning();
+  const returnTxHash = await ctx.ogmios.submitTx(txBuilder2.txHex);
+  log(`Returned 1000 LOYAL to sender! Tx: ${returnTxHash}`);
+  log(`CardanoScan: https://preview.cardanoscan.io/transaction/${returnTxHash}`);
+
+  // Update state — LOYAL tokens back at sender prog logic address
+  state.transferTxHash = returnTxHash;
+  saveState(state);
+
+  log("\n=== Phase 5 Complete ===");
+  log(`Round-trip transfer: 500 LOYAL sent to recipient, then 1000 consolidated back`);
+  log(`Send tx:   ${sendTxHash}`);
+  log(`Return tx: ${returnTxHash}`);
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -1170,9 +1503,12 @@ try {
     case "transfer":
       await transferTokens();
       break;
+    case "transfer-roundtrip":
+      await transferRoundTrip();
+      break;
     default:
       log(`Unknown command: ${command}`);
-      log("Usage: npm test [bootstrap|register|deploy|mint|transfer]");
+      log("Usage: npm test [bootstrap|register|deploy|mint|transfer|transfer-roundtrip]");
       process.exit(1);
   }
 } catch (err: any) {
