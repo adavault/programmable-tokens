@@ -1,3 +1,7 @@
+use cardano/assets.{PolicyId}
+use cardano/transaction.{Transaction, placeholder}
+use programmable_tokens/utils.{has_currency_symbol}
+
 /// CIP-113 Registry Spend
 ///
 /// Guards registry node UTxOs. Allows spending only when the registry mint
@@ -5,19 +9,8 @@
 /// complex validation (sort order, datum integrity, etc.).
 ///
 /// Parameterized by the registry mint policy ID.
-
-use cardano/assets
-use cardano/assets.{PolicyId}
-use cardano/transaction.{Transaction, placeholder}
-use programmable_tokens/utils.{has_currency_symbol}
-
 validator registry_spend(registry_mint_cs: PolicyId) {
-  spend(
-    _datum: Option<Data>,
-    _redeemer: Data,
-    _own_ref: Data,
-    tx: Transaction,
-  ) {
+  spend(_datum: Option<Data>, _redeemer: Data, _own_ref: Data, tx: Transaction) {
     // Registry nodes can only be spent when a registry mint operation is active.
     // The mint validator ensures linked list invariants are maintained.
     has_currency_symbol(tx.mint, registry_mint_cs)
@@ -49,8 +42,7 @@ test spend_fails_without_mint() fail {
 }
 
 test spend_fails_with_wrong_policy() fail {
-  let wrong_cs =
-    #"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  let wrong_cs = #"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   let tx =
     Transaction {
       ..placeholder,

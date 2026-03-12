@@ -1,3 +1,10 @@
+use aiken/collection/list
+use cardano/address.{Credential, Script}
+use cardano/assets
+use cardano/transaction.{Transaction, placeholder}
+use programmable_tokens/types.{SmartTokenMintingAction}
+use programmable_tokens/utils.{has_key}
+
 /// CIP-113 Issuance Mint
 ///
 /// Parameterized minting policy for programmable tokens. Each programmable
@@ -9,14 +16,6 @@
 ///
 /// Parameterized by the programmable_logic_global stake credential, so that
 /// the global coordinator can verify this policy against the registry.
-
-use aiken/collection/list
-use cardano/address.{Credential, Script}
-use cardano/assets
-use cardano/transaction.{Transaction, placeholder}
-use programmable_tokens/types.{SmartTokenMintingAction}
-use programmable_tokens/utils.{has_key}
-
 validator issuance_mint(global_cred: Credential) {
   mint(
     redeemer: SmartTokenMintingAction,
@@ -55,8 +54,7 @@ const t_global_hash =
 const t_minting_logic_hash =
   #"22222222222222222222222222222222222222222222222222222222"
 
-const t_policy =
-  #"33333333333333333333333333333333333333333333333333333333"
+const t_policy = #"33333333333333333333333333333333333333333333333333333333"
 
 test mint_succeeds_with_both_withdrawals() {
   let tx =
@@ -69,9 +67,7 @@ test mint_succeeds_with_both_withdrawals() {
       ],
     }
   let redeemer =
-    SmartTokenMintingAction {
-      minting_logic_cred: Script(t_minting_logic_hash),
-    }
+    SmartTokenMintingAction { minting_logic_cred: Script(t_minting_logic_hash) }
   issuance_mint.mint(Script(t_global_hash), redeemer, t_policy, tx)
 }
 
@@ -83,9 +79,7 @@ test mint_fails_without_global() fail {
       withdrawals: [Pair(Script(t_minting_logic_hash), 0)],
     }
   let redeemer =
-    SmartTokenMintingAction {
-      minting_logic_cred: Script(t_minting_logic_hash),
-    }
+    SmartTokenMintingAction { minting_logic_cred: Script(t_minting_logic_hash) }
   issuance_mint.mint(Script(t_global_hash), redeemer, t_policy, tx)
 }
 
@@ -97,9 +91,7 @@ test mint_fails_without_minting_logic() fail {
       withdrawals: [Pair(Script(t_global_hash), 0)],
     }
   let redeemer =
-    SmartTokenMintingAction {
-      minting_logic_cred: Script(t_minting_logic_hash),
-    }
+    SmartTokenMintingAction { minting_logic_cred: Script(t_minting_logic_hash) }
   issuance_mint.mint(Script(t_global_hash), redeemer, t_policy, tx)
 }
 
@@ -114,8 +106,6 @@ test burn_succeeds_with_both_withdrawals() {
       ],
     }
   let redeemer =
-    SmartTokenMintingAction {
-      minting_logic_cred: Script(t_minting_logic_hash),
-    }
+    SmartTokenMintingAction { minting_logic_cred: Script(t_minting_logic_hash) }
   issuance_mint.mint(Script(t_global_hash), redeemer, t_policy, tx)
 }

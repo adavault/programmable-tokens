@@ -1,3 +1,17 @@
+use aiken/collection/dict
+use aiken/collection/list
+use cardano/address
+use cardano/assets
+use cardano/transaction.{
+  InlineDatum, Input, Output, OutputReference, Transaction, placeholder,
+}
+use programmable_tokens/types.{
+  RegistryInit, RegistryInsert, RegistryNode, RegistryRedeemer, origin_node_tn,
+}
+use programmable_tokens/utils.{
+  bytearray_lt, expect_inline_datum, has_currency_symbol,
+}
+
 /// CIP-113 Registry Mint
 ///
 /// Minting policy for the sorted linked list registry of programmable token policies.
@@ -8,24 +22,8 @@
 ///   RegistryInsert — Insert a new token policy. Splits a covering node.
 ///
 /// Parameterized by a UTxO reference consumed during init (one-shot guarantee).
-
-use aiken/collection/dict
-use aiken/collection/list
-use cardano/address
-use cardano/assets
-use cardano/transaction.{InlineDatum, Input, Output, OutputReference, Transaction,
-  placeholder}
-use programmable_tokens/types.{RegistryInit, RegistryInsert, RegistryNode,
-  RegistryRedeemer, origin_node_tn}
-use programmable_tokens/utils.{bytearray_lt, expect_inline_datum,
-  has_currency_symbol}
-
 validator registry_mint(utxo_ref: OutputReference) {
-  mint(
-    redeemer: RegistryRedeemer,
-    policy_id: assets.PolicyId,
-    tx: Transaction,
-  ) {
+  mint(redeemer: RegistryRedeemer, policy_id: assets.PolicyId, tx: Transaction) {
     when redeemer is {
       RegistryInit -> validate_init(utxo_ref, policy_id, tx)
       RegistryInsert { key, .. } -> validate_insert(policy_id, key, tx)
@@ -55,8 +53,7 @@ fn validate_init(
   let correct_mint = dict.to_pairs(minted) == [Pair(origin_node_tn, 1)]
 
   // No existing registry nodes should be spent
-  let no_registry_inputs =
-    count_registry_inputs(tx.inputs, policy_id) == 0
+  let no_registry_inputs = count_registry_inputs(tx.inputs, policy_id) == 0
 
   // Output must have origin NFT with correct sentinel datum
   expect Some(origin_output) =
@@ -90,8 +87,7 @@ fn validate_insert(
   // Find outputs: updated covering node + new node
   expect Some(covering_output) =
     find_output_with_token(tx.outputs, policy_id, covering_node.key)
-  expect Some(new_output) =
-    find_output_with_token(tx.outputs, policy_id, key)
+  expect Some(new_output) = find_output_with_token(tx.outputs, policy_id, key)
 
   // Covering node: only next pointer changes → points to new key
   let covering_datum = expect_inline_datum(covering_output)
@@ -113,10 +109,7 @@ fn validate_insert(
 // ---------------------------------------------------------------------------
 
 /// Count inputs that hold a registry NFT.
-fn count_registry_inputs(
-  inputs: List<Input>,
-  policy_id: assets.PolicyId,
-) -> Int {
+fn count_registry_inputs(inputs: List<Input>, policy_id: assets.PolicyId) -> Int {
   list.count(
     inputs,
     fn(input) { has_currency_symbol(input.output.value, policy_id) },
@@ -138,8 +131,7 @@ fn find_covering_node(
           let datum = expect_inline_datum(input.output)
           expect node: RegistryNode = datum
           let key_ok = bytearray_lt(node.key, key)
-          let next_ok =
-            node.next == #"" || bytearray_lt(key, node.next)
+          let next_ok = node.next == #"" || bytearray_lt(key, node.next)
           key_ok && next_ok
         } else {
           False
@@ -179,8 +171,7 @@ const t_utxo_ref =
     output_index: 0,
   }
 
-const t_holder_pkh =
-  #"11111111111111111111111111111111111111111111111111111111"
+const t_holder_pkh = #"11111111111111111111111111111111111111111111111111111111"
 
 const t_transfer_logic_hash =
   #"22222222222222222222222222222222222222222222222222222222"
@@ -251,9 +242,7 @@ test init_fails_with_wrong_datum() fail {
   let bad_output =
     Output {
       ..t_origin_output(),
-      datum: InlineDatum(
-        RegistryNode { ..t_origin_datum(), key: #"abcd" },
-      ),
+      datum: InlineDatum(RegistryNode { ..t_origin_datum(), key: #"abcd" }),
     }
   let tx =
     Transaction {
@@ -267,8 +256,7 @@ test init_fails_with_wrong_datum() fail {
 
 // -- Insert tests --
 
-const t_new_key =
-  #"44444444444444444444444444444444444444444444444444444444"
+const t_new_key = #"44444444444444444444444444444444444444444444444444444444"
 
 fn t_covering_input() -> transaction.Input {
   transaction.Input {
@@ -291,9 +279,7 @@ fn t_updated_covering_output() -> Output {
     address: address.from_verification_key(t_holder_pkh),
     value: assets.from_lovelace(2_000_000)
       |> assets.add(t_registry_policy, origin_node_tn, 1),
-    datum: InlineDatum(
-      RegistryNode { ..t_origin_datum(), next: t_new_key },
-    ),
+    datum: InlineDatum(RegistryNode { ..t_origin_datum(), next: t_new_key }),
     reference_script: None,
   }
 }
@@ -350,7 +336,9 @@ test insert_fails_wrong_sort_order() fail {
             key: t_new_key,
             next: #"",
             transfer_logic_script: address.Script(t_transfer_logic_hash),
-            third_party_transfer_logic_script: address.Script(t_third_party_hash),
+            third_party_transfer_logic_script: address.Script(
+              t_third_party_hash,
+            ),
             global_state_cs: #"",
           },
         ),
@@ -358,8 +346,7 @@ test insert_fails_wrong_sort_order() fail {
       },
     }
   // Try inserting key "11..." which is less than covering key "44..."
-  let small_key =
-    #"11111111111111111111111111111111111111111111111111111111"
+  let small_key = #"11111111111111111111111111111111111111111111111111111111"
   let tx =
     Transaction {
       ..placeholder,
@@ -397,11 +384,9 @@ test insert_fails_covering_node_not_updated() fail {
 
 test insert_middle_succeeds() {
   // Origin → 44... → ""  becomes  Origin → 22... → 44... → ""
-  let mid_key =
-    #"22222222222222222222222222222222222222222222222222222222"
+  let mid_key = #"22222222222222222222222222222222222222222222222222222222"
   // Covering node: origin with next=44...
-  let origin_with_next =
-    RegistryNode { ..t_origin_datum(), next: t_new_key }
+  let origin_with_next = RegistryNode { ..t_origin_datum(), next: t_new_key }
   let covering =
     transaction.Input {
       output_reference: OutputReference {
@@ -421,9 +406,7 @@ test insert_middle_succeeds() {
       address: address.from_verification_key(t_holder_pkh),
       value: assets.from_lovelace(2_000_000)
         |> assets.add(t_registry_policy, origin_node_tn, 1),
-      datum: InlineDatum(
-        RegistryNode { ..origin_with_next, next: mid_key },
-      ),
+      datum: InlineDatum(RegistryNode { ..origin_with_next, next: mid_key }),
       reference_script: None,
     }
   let new_node =

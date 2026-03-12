@@ -1,7 +1,3 @@
-/// CIP-113 Programmable Tokens — Utility Functions
-///
-/// Common helpers used across validators.
-
 use aiken/builtin
 use aiken/collection/dict
 use aiken/collection/list
@@ -9,6 +5,9 @@ use cardano/address.{Credential}
 use cardano/assets.{PolicyId}
 use cardano/transaction.{InlineDatum, Output}
 
+/// CIP-113 Programmable Tokens — Utility Functions
+///
+/// Common helpers used across validators.
 /// Check if a credential exists as a key in a pairs list (withdrawals, etc.)
 pub fn has_key(pairs: Pairs<Credential, a>, cred: Credential) -> Bool {
   list.any(pairs, fn(pair) { pair.1st == cred })
